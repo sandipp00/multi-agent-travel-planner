@@ -57,9 +57,12 @@ def _flight_lines(result) -> list:
 def _hotel_lines(result) -> list:
     options, lines = _options(result)
     for item in options:
+        area = f" ({item['area']})" if item.get("area") else ""
+        total = f" (total {_money(item['total_usd'])})" if item.get("total_usd") is not None else ""
+        reviews = f", {item['reviews']:,} reviews" if isinstance(item.get("reviews"), int) else ""
         lines.append(
-            f"  - {item.get('name', '?')} ({item.get('area', '?')}): "
-            f"{_money(item.get('price_per_night_usd'))}/night, rating {item.get('rating', '?')}"
+            f"  - {item.get('name', '?')}{area}: {_money(item.get('price_per_night_usd'))}/night{total}, "
+            f"rating {item.get('rating') or '?'}{reviews}"
             + _link(item)
         )
     return lines

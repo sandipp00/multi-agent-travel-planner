@@ -19,15 +19,19 @@ data from free public APIs.
        ┌──────────────┬─────────────┼───────────────┬────────────────┐
        ▼              ▼             ▼               ▼                ▼
  search_flights  search_hotels  search_activities  get_destination_  analyze_budget
- (Google Flights (own model     (own model call    info              (pure Python —
-  fares; web      call + web     + web search)     (free APIs — no   no LLM call)
-  search fallback) search)                          LLM call)
+ (Google Flights (Google Hotels (own model call    info              (pure Python —
+  fares; web      via SerpApi;   + web search)     (free APIs — no   no LLM call)
+  search fallback) web search                       LLM call)
+                   fallback)
 ```
 
-The hotel and activity specialists are each a **separate model call**
-(GPT-OSS 20B) with a narrow system prompt, grounded in its own fresh
-DuckDuckGo search — not just a Python function the orchestrator happens to
-run locally. The flight specialist gets **real fares from Google Flights**
+The activity specialist is a **separate model call** (GPT-OSS 20B) with a
+narrow system prompt, grounded in its own fresh DuckDuckGo search — not just
+a Python function the orchestrator happens to run locally. The hotel
+specialist gets **real Google Hotels prices** through
+[SerpApi](https://serpapi.com/google-hotels-api) when you add a free
+`SERPAPI_API_KEY`, and otherwise makes the same kind of search-and-summarize
+model call, flagged as estimates. The flight specialist gets **real fares from Google Flights**
 through the free, unofficial [`fast-flights`](https://pypi.org/project/fast-flights/)
 library, and falls back to the same search-and-summarize call if Google
 Flights is unavailable or it's given a city name instead of an airport code.
@@ -67,7 +71,7 @@ multi-agent-travel-planner/
 │   ├── report.py              # "Data used for this plan" section
 │   └── agents/
 │       ├── flight_agent.py    # Google Flights fares, web-search fallback
-│       ├── hotel_agent.py     # Lodging-search specialist (web search)
+│       ├── hotel_agent.py     # Google Hotels via SerpApi, web-search fallback
 │       ├── activity_agent.py  # Activities specialist (web search)
 │       ├── destination_agent.py # Weather, currency, sights, guide (free APIs)
 │       └── budget_agent.py    # Pure-arithmetic budget checker
@@ -96,6 +100,11 @@ cp .env.example .env   # then fill in GROQ_API_KEY
 ```
 
 Web search uses DuckDuckGo and needs no key.
+
+**Optional — real hotel prices:** create a free account at
+<https://serpapi.com> and add `SERPAPI_API_KEY` to `.env`. Each trip plan
+uses one hotel search out of the free plan's monthly allowance. Without the
+key, hotel prices are web-search estimates and every plan says so.
 
 The free tier has per-minute and per-day rate limits; a full trip plan uses
 several requests, so if you hit a limit, wait a minute and try again. If
@@ -149,7 +158,8 @@ access is needed to run the suite (see `tests/`).
 ## Tech stack
 
 Python · Groq API (free tier, `openai/gpt-oss-120b` + `openai/gpt-oss-20b`,
-function calling) · Google Flights (`fast-flights`) · DuckDuckGo search
+function calling) · Google Flights (`fast-flights`) · Google Hotels
+(SerpApi, optional) · DuckDuckGo search
 (`ddgs`) · Open-Meteo · Wikidata · Wikivoyage · OpenStreetMap Nominatim ·
 ExchangeRate-API · pytest · GitHub Actions
 
