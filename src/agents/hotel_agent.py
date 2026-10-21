@@ -72,7 +72,7 @@ def _to_option(prop: dict) -> dict | None:
         "area": prop.get("hotel_class") or prop.get("type") or "",
         "price_per_night_usd": nightly,
         "total_usd": total,
-        "rating": prop.get("overall_rating"),
+        "rating": round(prop["overall_rating"], 1) if prop.get("overall_rating") is not None else None,
         "reviews": prop.get("reviews"),
         "notes": notes,
         "source_url": prop.get("link", ""),

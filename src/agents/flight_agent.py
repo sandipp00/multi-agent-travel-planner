@@ -7,9 +7,13 @@ model call grounded in a fresh web search.
 """
 
 import datetime as dt
+import json
 import re
 
-from fast_flights import FlightQuery, Passengers, create_query, get_flights
+from fast_flights import FlightQuery, Passengers, create_query
+from fast_flights.fetcher import fetch_flights_html
+from fast_flights.parser import parse_js
+from selectolax.lexbor import LexborHTMLParser
 
 from src.config import AGENT_MAX_TOKENS, MODEL_AGENT
 from src.json_utils import parse_json_loose
@@ -94,6 +98,37 @@ def _to_option(result, round_trip: bool) -> dict:
     }
 
 
+def _has_price(listing) -> bool:
+    try:
+        return listing[1][0][1] is not None
+    except (IndexError, TypeError):
+        return False
+
+
+def _fetch_fares(query):
+    """Like fast_flights.get_flights, but skips listings shown without a price.
+
+    fast-flights 3.1 indexes every listing's price, so a single unpriced one
+    (common on regional routes such as LIM->CUZ or BOM->DPS) raises
+    IndexError and loses the whole page. Drop those listings from Google's
+    embedded data, then hand the rest to the library's own parser.
+    """
+    html = fetch_flights_html(query)
+    js = LexborHTMLParser(html).css_first(r"script.ds\:1").text()
+    head, rest = js.split("data:", 1)
+    data, tail = rest.rsplit(",", 1)
+    if data.endswith("errorHasStatus: true"):
+        return parse_js(js)  # raises FlightsNotFound
+
+    payload = json.loads(data)
+    # No listings at all (e.g. JNB->ZNZ): the library would crash on this too.
+    if not payload[3]:
+        return []
+    if payload[3][0]:
+        payload[3][0] = [listing for listing in payload[3][0] if _has_price(listing)]
+    return parse_js(f"{head}data:{json.dumps(payload)},{tail}")
+
+
 def _google_flights(origin: str, destination: str, depart_date: str, return_date: str):
     """Return (up to MAX_OPTIONS cheapest real fares, Google Flights URL),
     or ([], "") if unavailable.
@@ -114,7 +149,7 @@ def _google_flights(origin: str, destination: str, depart_date: str, return_date
     )
 
     try:
-        results = [r for r in get_flights(query) if r.price and r.flights]
+        results = [r for r in _fetch_fares(query) if r.price and r.flights]
         results.sort(key=lambda r: r.price)
         return [_to_option(r, bool(return_date)) for r in results[:MAX_OPTIONS]], query.url()
     except Exception:

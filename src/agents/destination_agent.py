@@ -25,7 +25,9 @@ USER_AGENT = "multi-agent-travel-planner/1.0 (+https://github.com/sandipp00/mult
 TIMEOUT_SECONDS = 30
 FORECAST_HORIZON_DAYS = 15
 MAX_SIGHTS = 10
-SIGHTS_RADIUS_KM = 4
+# Big cities' map centre can sit far from the famous sights (Tokyo's is in
+# Shinjuku, 8 km from Senso-ji); ranking by fame keeps a wide radius useful.
+SIGHTS_RADIUS_KM = 10
 GUIDE_CHARS = 600
 
 TOOL = {
@@ -63,7 +65,7 @@ def _get_json(url: str, params: dict | None = None):
 def _geocode(destination: str) -> dict:
     results = _get_json(
         "https://nominatim.openstreetmap.org/search",
-        {"q": destination, "format": "json", "limit": 1, "addressdetails": 1},
+        {"q": destination, "format": "json", "limit": 1, "addressdetails": 1, "accept-language": "en"},
     )
     if not results:
         raise ValueError(f"Could not find {destination!r} on OpenStreetMap")
@@ -156,10 +158,14 @@ def _currency(country_code: str, home_currency: str) -> dict:
 
 # Wikidata classes that count as sights: museum, art museum, open-air museum,
 # tourist attraction, archaeological site, palace, castle, fortification,
-# cathedral, church building, fountain, square, monument, park, bridge.
+# cathedral, church building, fountain, square, monument, park, bridge,
+# temple, Buddhist temple, Shinto shrine, Hindu temple, mosque, tower,
+# observation tower, garden, market.
 _SIGHT_TYPES = (
     "wd:Q33506 wd:Q207694 wd:Q1060829 wd:Q570116 wd:Q839954 wd:Q16560 wd:Q23413 "
-    "wd:Q57821 wd:Q2977 wd:Q16970 wd:Q483453 wd:Q174782 wd:Q4989906 wd:Q22698 wd:Q12280"
+    "wd:Q57821 wd:Q2977 wd:Q16970 wd:Q483453 wd:Q174782 wd:Q4989906 wd:Q22698 wd:Q12280 "
+    "wd:Q44539 wd:Q5393308 wd:Q845945 wd:Q842402 wd:Q32815 wd:Q12518 wd:Q1440476 "
+    "wd:Q1107656 wd:Q37654"
 )
 
 
