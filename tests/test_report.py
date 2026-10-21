@@ -91,3 +91,15 @@ def test_report_shows_destination_info_and_partial_failures():
     assert "EUR — 100 USD = 89.0 EUR" in report
     assert "Sights: sights unavailable: timed out" in report
     assert "https://en.wikivoyage.org/wiki/Rome" in report
+
+
+def test_real_listing_without_website_is_not_called_an_estimate():
+    real = format_report([("search_hotels", {"destination": "Marrakesh"}, {
+        "source": "Google Hotels via SerpApi (real prices)",
+        "options": [{"name": "Riad", "price_per_night_usd": 36, "source_url": ""}]})])
+    estimated = format_report([("search_hotels", {"destination": "Marrakesh"}, {
+        "source": "web search estimates", "warning": "ESTIMATES ONLY — no key.",
+        "options": [{"name": "Riad", "price_per_night_usd": 36, "source_url": ""}]})])
+
+    assert "(no website listed)" in real and "estimate)" not in real
+    assert "(no source link — estimate)" in estimated

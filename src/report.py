@@ -12,9 +12,20 @@ def _money(value) -> str:
         return "?"
 
 
-def _link(item: dict) -> str:
+def _link(item: dict, estimated: bool) -> str:
     url = item.get("source_url") or ""
-    return f"\n      {url}" if url else "\n      (no source link — estimate)"
+    if url:
+        return f"\n      {url}"
+    # A real-price listing can simply lack a website; only call it an
+    # estimate when the data itself is estimated.
+    return "\n      (no source link — estimate)" if estimated else "\n      (no website listed)"
+
+
+def _is_estimated(result) -> bool:
+    """Real-price results carry a "source" and no "warning"; anything else
+    (web-search fallbacks, plain model-written lists) is estimated.
+    """
+    return not (isinstance(result, dict) and "source" in result and "warning" not in result)
 
 
 def _options(result):
@@ -38,6 +49,7 @@ def _options(result):
 
 def _flight_lines(result) -> list:
     options, lines = _options(result)
+    estimated = _is_estimated(result)
     for item in options:
         stops = item.get("stops")
         stop_text = "nonstop" if stops == 0 else f"{stops} stop(s)" if stops is not None else ""
@@ -50,12 +62,13 @@ def _flight_lines(result) -> list:
             lines.append(f"      {item['notes']}")
         # Google Flights options share the one link printed in the header.
         if "source_url" in item:
-            lines[-1] += _link(item)
+            lines[-1] += _link(item, estimated)
     return lines
 
 
 def _hotel_lines(result) -> list:
     options, lines = _options(result)
+    estimated = _is_estimated(result)
     for item in options:
         area = f" ({item['area']})" if item.get("area") else ""
         total = f" (total {_money(item['total_usd'])})" if item.get("total_usd") is not None else ""
@@ -63,18 +76,19 @@ def _hotel_lines(result) -> list:
         lines.append(
             f"  - {item.get('name', '?')}{area}: {_money(item.get('price_per_night_usd'))}/night{total}, "
             f"rating {item.get('rating') or '?'}{reviews}"
-            + _link(item)
+            + _link(item, estimated)
         )
     return lines
 
 
 def _activity_lines(result) -> list:
     options, lines = _options(result)
+    estimated = _is_estimated(result)
     for item in options:
         lines.append(
             f"  - {item.get('name', '?')} [{item.get('category', '?')}]: "
             f"{_money(item.get('estimated_cost_usd'))}, {item.get('duration_hours', '?')} h"
-            + _link(item)
+            + _link(item, estimated)
         )
     return lines
 
