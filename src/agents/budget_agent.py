@@ -26,6 +26,13 @@ TOOL = {
                     "description": "Estimated hotel cost per night, in USD.",
                 },
                 "nights": {"type": "integer", "description": "Number of nights of lodging."},
+                "hotel_total_usd": {
+                    "type": ["number", "null"],
+                    "description": (
+                        "The hotel's exact total for the stay, when the hotel search gave one "
+                        "(its total_usd). Preferred over nightly price x nights, which is rounded."
+                    ),
+                },
                 "activities_cost_usd": {
                     "type": ["number", "null"],
                     "description": "Estimated total cost of planned activities, in USD.",
@@ -43,8 +50,13 @@ def analyze_budget(
     hotel_cost_per_night_usd: float,
     nights: int,
     activities_cost_usd: float = 0.0,
+    hotel_total_usd: float | None = None,
 ) -> dict:
-    hotel_total_usd = round(hotel_cost_per_night_usd * nights, 2)
+    # Google Hotels rounds the nightly rate but gives an exact stay total
+    # ($15/night x 5 = $75, real total $76), so prefer the total.
+    if hotel_total_usd is None:
+        hotel_total_usd = hotel_cost_per_night_usd * nights
+    hotel_total_usd = round(hotel_total_usd, 2)
     total_cost_usd = round(flight_cost_usd + hotel_total_usd + activities_cost_usd, 2)
     remaining_usd = round(total_budget_usd - total_cost_usd, 2)
 

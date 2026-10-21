@@ -37,3 +37,16 @@ def test_defaults_activities_to_zero():
     )
     assert result["activities_cost_usd"] == 0.0
     assert result["total_cost_usd"] == 600
+
+
+def test_prefers_exact_hotel_total_over_rounded_nightly_rate():
+    result = analyze_budget(
+        total_budget_usd=1500,
+        flight_cost_usd=505,
+        hotel_cost_per_night_usd=15,
+        nights=5,
+        activities_cost_usd=142,
+        hotel_total_usd=76,
+    )
+    assert result["hotel_total_usd"] == 76
+    assert result["total_cost_usd"] == 723

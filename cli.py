@@ -7,6 +7,7 @@ import sys
 
 import groq
 
+from src.fact_check import check
 from src.llm_client import get_client
 from src.orchestrator import run_turn, tool_results
 from src.report import format_report
@@ -53,9 +54,16 @@ def main() -> None:
             continue
         print(f"Planner: {reply}\n")
 
-        report = format_report(tool_results(messages, turn_start))
+        results = tool_results(messages, turn_start)
+        report = format_report(results)
         if report:
             print(f"{report}\n")
+
+        # The planner already had one chance to fix these; show what's left.
+        issues = check(reply, results)
+        if issues:
+            print("FACT CHECK — these statements in the plan don't match the data above:")
+            print("\n".join(f"  - {issue}" for issue in issues) + "\n")
 
 
 if __name__ == "__main__":
