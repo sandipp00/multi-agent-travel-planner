@@ -18,7 +18,9 @@ def _tool_call(call_id, name, arguments):
 
 def test_tools_wired_correctly():
     names = {tool["function"]["name"] for tool in TOOLS}
-    assert names == {"search_flights", "search_hotels", "search_activities", "analyze_budget"}
+    assert names == {
+        "search_flights", "search_hotels", "search_activities", "get_destination_info", "analyze_budget",
+    }
 
 
 def test_run_turn_without_tools_appends_assistant_message_and_returns_text():

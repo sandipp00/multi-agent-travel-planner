@@ -1,31 +1,39 @@
-"""The orchestrator agent: coordinates the flight, hotel, activity, and
-budget specialist agents (via Groq tool calling) to plan a trip.
+"""The orchestrator agent: coordinates the flight, hotel, activity,
+destination-info, and budget specialist agents (via Groq tool calling) to plan a trip.
 """
 
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from src.agents import activity_agent, budget_agent, flight_agent, hotel_agent
+from src.agents import activity_agent, budget_agent, destination_agent, flight_agent, hotel_agent
 from src.config import MAX_TOOL_ROUNDS, MODEL_ORCHESTRATOR, ORCHESTRATOR_MAX_TOKENS
 
 ORCHESTRATOR_SYSTEM = """You are a travel-planning orchestrator. You do not search the web \
-yourself — instead you coordinate four specialist agents, each exposed to you as a tool:
+yourself — instead you coordinate five specialist agents, each exposed to you as a tool:
 
 - search_flights: a flight-search specialist with live web access
 - search_hotels: a lodging-search specialist with live web access
 - search_activities: a local-activities specialist with live web access
+- get_destination_info: real weather, currency/exchange rate, famous sights, and a travel-guide \
+intro for the destination
 - analyze_budget: a pure arithmetic specialist that checks cost estimates against budget
 
 For any trip-planning request:
 1. Make sure you have origin, destination, dates, and a total budget. Ask the user for \
 anything missing before calling tools.
-2. Call search_flights, search_hotels, and search_activities to gather concrete options. \
+2. Call search_flights, search_hotels, search_activities, and get_destination_info to gather \
+concrete options and facts. \
 You may call independent tools in the same turn so they run in parallel.
 3. Once you have concrete price estimates, call analyze_budget with real numbers drawn from \
-the specialists' results — never invent your own totals.
+the specialists' results — never invent your own totals. Every total, subtotal, and \
+remaining amount you show must be copied exactly from analyze_budget's result; if you change \
+the selection afterwards, call analyze_budget again.
 4. Present the traveler a clear day-by-day itinerary plus a budget summary, citing the \
 specific flight/hotel/activity options the specialists found. If analyze_budget reports \
 over_budget, say so plainly and suggest concrete cheaper alternatives from the same results.
+5. Use get_destination_info in the plan: say what weather to expect (and whether it is a \
+forecast or a typical-weather guide), what to pack for it, the local currency with a \
+conversion example, and work its famous sights into the itinerary.
 
 Ground every price and recommendation in a specialist tool's output — never fabricate one. \
 Label itinerary days by date only (e.g. "Day 1 – Sep 7"); never name weekdays, since you \
@@ -38,10 +46,13 @@ _AGENTS = {
     "search_flights": flight_agent.search_flights,
     "search_hotels": hotel_agent.search_hotels,
     "search_activities": activity_agent.search_activities,
+    "get_destination_info": destination_agent.get_destination_info,
     "analyze_budget": budget_agent.analyze_budget,
 }
 
-TOOLS = [flight_agent.TOOL, hotel_agent.TOOL, activity_agent.TOOL, budget_agent.TOOL]
+TOOLS = [
+    flight_agent.TOOL, hotel_agent.TOOL, activity_agent.TOOL, destination_agent.TOOL, budget_agent.TOOL,
+]
 
 
 def _run_tool(tool_call) -> str:

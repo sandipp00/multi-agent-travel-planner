@@ -72,3 +72,22 @@ def test_report_shows_warnings_and_errors():
 
 def test_empty_report_when_no_tools_ran():
     assert format_report([]) == ""
+
+
+def test_report_shows_destination_info_and_partial_failures():
+    report = format_report([
+        ("get_destination_info", {"destination": "Rome", "start_date": "2027-09-06", "end_date": "2027-09-10"},
+         {"location": "Roma, Lazio, Italia",
+          "weather": {"basis": "forecast for the trip dates", "avg_high_c": 29.0, "avg_low_c": 18.0,
+                      "avg_high_f": 84, "avg_low_f": 64, "rainy_days": 1, "days": 5, "source": "Open-Meteo"},
+          "currency": {"local_currency": "EUR", "home_currency": "USD", "rate": 0.89,
+                       "example": "100 USD = 89.0 EUR", "as_of": "today", "source": "ExchangeRate-API"},
+          "sights": {"error": "sights unavailable: timed out"},
+          "guide": {"summary": "Rome.", "url": "https://en.wikivoyage.org/wiki/Rome", "source": "Wikivoyage"}}),
+    ])
+
+    assert "Destination info — Rome, 2027-09-06 to 2027-09-10" in report
+    assert "highs ~29.0°C / 84°F" in report and "1 of 5 days with rain" in report
+    assert "EUR — 100 USD = 89.0 EUR" in report
+    assert "Sights: sights unavailable: timed out" in report
+    assert "https://en.wikivoyage.org/wiki/Rome" in report

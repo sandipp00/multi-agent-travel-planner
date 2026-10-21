@@ -89,6 +89,47 @@ def _budget_lines(result) -> list:
     ]
 
 
+def _destination_lines(result) -> list:
+    if not isinstance(result, dict) or "error" in result:
+        return [f"  Error: {result.get('error') if isinstance(result, dict) else result}"]
+    lines = [f"  Location: {result.get('location', '?')}"]
+
+    weather = result.get("weather", {})
+    if "error" in weather:
+        lines.append(f"  Weather: {weather['error']}")
+    else:
+        lines.append(
+            f"  Weather: highs ~{weather['avg_high_c']}°C / {weather['avg_high_f']}°F, "
+            f"lows ~{weather['avg_low_c']}°C / {weather['avg_low_f']}°F, "
+            f"{weather['rainy_days']} of {weather['days']} days with rain"
+        )
+        lines.append(f"      Basis: {weather['basis']} (source: {weather['source']})")
+
+    currency = result.get("currency", {})
+    if "error" in currency:
+        lines.append(f"  Currency: {currency['error']}")
+    elif currency.get("local_currency") == currency.get("home_currency"):
+        lines.append(f"  Currency: {currency['local_currency']} (same as home currency)")
+    else:
+        lines.append(f"  Currency: {currency['local_currency']} — {currency['example']}")
+        lines.append(f"      Rate as of {currency.get('as_of', '?')} (source: {currency.get('source', '?')})")
+
+    sights = result.get("sights", [])
+    if isinstance(sights, dict):
+        lines.append(f"  Sights: {sights.get('error')}")
+    else:
+        lines.append("  Famous sights (Wikidata, most famous first):")
+        for sight in sights:
+            lines.append(f"  - {sight['name']} [{sight['type']}]" + (f"\n      {sight['website']}" if sight["website"] else ""))
+
+    guide = result.get("guide", {})
+    if "error" in guide:
+        lines.append(f"  Guide: {guide['error']}")
+    else:
+        lines.append(f"  Travel guide: {guide['url']}")
+    return lines
+
+
 _SECTIONS = {
     "search_flights": ("Flights", _flight_lines, lambda a: f"{a.get('origin')} -> {a.get('destination')}, "
                        f"{a.get('depart_date')}" + (f" to {a['return_date']}" if a.get("return_date") else "")),
@@ -96,6 +137,8 @@ _SECTIONS = {
                       f"{a.get('checkin')} to {a.get('checkout')}"),
     "search_activities": ("Activities", _activity_lines, lambda a: f"{a.get('destination')}"
                           + (f", interests: {a['interests']}" if a.get("interests") else "")),
+    "get_destination_info": ("Destination info", _destination_lines, lambda a: f"{a.get('destination')}, "
+                             f"{a.get('start_date')} to {a.get('end_date')}"),
     "analyze_budget": ("Budget check", _budget_lines, lambda a: ""),
 }
 

@@ -2,8 +2,9 @@
 
 A trip-planning assistant built as a genuine multi-agent system that runs
 **entirely free**: open models on Groq's free tier plus DuckDuckGo web
-search (no key needed). One **orchestrator** agent delegates to four
-**specialist agents**, each of which is its own independent model call.
+search (no key needed). One **orchestrator** agent delegates to five
+**specialist agents** — some are their own model calls, others pull exact
+data from free public APIs.
 
 ## Architecture
 
@@ -15,12 +16,12 @@ search (no key needed). One **orchestrator** agent delegates to four
                         │  itinerary + budget      │
                         └───────────┬─────────────┘
                                     │ tool calls (Groq function calling)
-              ┌─────────────┬───────┼────────────┬──────────────┐
-              ▼             ▼                    ▼              ▼
-      search_flights  search_hotels     search_activities  analyze_budget
-      (Google Flights  (own model call   (own model call     (pure Python —
-       fares; web       + web search)     + web search)       no LLM call)
-       search fallback)
+       ┌──────────────┬─────────────┼───────────────┬────────────────┐
+       ▼              ▼             ▼               ▼                ▼
+ search_flights  search_hotels  search_activities  get_destination_  analyze_budget
+ (Google Flights (own model     (own model call    info              (pure Python —
+  fares; web      call + web     + web search)     (free APIs — no   no LLM call)
+  search fallback) search)                          LLM call)
 ```
 
 The hotel and activity specialists are each a **separate model call**
@@ -29,10 +30,23 @@ DuckDuckGo search — not just a Python function the orchestrator happens to
 run locally. The flight specialist gets **real fares from Google Flights**
 through the free, unofficial [`fast-flights`](https://pypi.org/project/fast-flights/)
 library, and falls back to the same search-and-summarize call if Google
-Flights is unavailable or it's given a city name instead of an airport code. The orchestrator never searches the web
-itself; it only sees each specialist's structured JSON result and reasons
-over those. `analyze_budget` is deliberately plain arithmetic (no LLM call)
-so budget checks are exact rather than estimated.
+Flights is unavailable or it's given a city name instead of an airport code.
+`get_destination_info` makes no model call: it gathers real facts from free,
+key-less public APIs —
+
+| Data | Source |
+|---|---|
+| Location | OpenStreetMap Nominatim |
+| Weather | Open-Meteo — a forecast when the trip is within ~2 weeks, otherwise the actual weather on the same dates last year as a typical-weather guide |
+| Currency | `babel` (country → currency) + ExchangeRate-API (open.er-api.com) |
+| Famous sights | Wikidata, ranked by how many Wikipedia languages cover each place |
+| Travel guide | Wikivoyage |
+
+Each of those parts fails independently, so one service being down doesn't
+lose the rest. The orchestrator never searches the web itself; it only sees
+each specialist's structured JSON result and reasons over those.
+`analyze_budget` is deliberately plain arithmetic (no LLM call) so budget
+checks are exact rather than estimated.
 
 Delegation uses Groq's OpenAI-compatible **function calling**.
 `src/orchestrator.py` runs the agentic loop itself: it calls the model,
@@ -50,10 +64,12 @@ multi-agent-travel-planner/
 │   ├── llm_client.py          # Groq client + DuckDuckGo search-then-summarize
 │   ├── json_utils.py          # Lenient JSON extraction from agent replies
 │   ├── orchestrator.py        # Orchestrator system prompt + tool wiring
+│   ├── report.py              # "Data used for this plan" section
 │   └── agents/
 │       ├── flight_agent.py    # Google Flights fares, web-search fallback
 │       ├── hotel_agent.py     # Lodging-search specialist (web search)
 │       ├── activity_agent.py  # Activities specialist (web search)
+│       ├── destination_agent.py # Weather, currency, sights, guide (free APIs)
 │       └── budget_agent.py    # Pure-arithmetic budget checker
 ├── tests/                     # Mocked unit tests — no network/API calls
 ├── .github/workflows/ci.yml
@@ -97,14 +113,15 @@ You: Plan a 5-day trip from Chicago to Lisbon in September, budget $2500 total.
 ```
 
 The orchestrator will ask for anything it's missing, then call the flight,
-hotel, and activity specialists (each doing its own live web search),
-check the results against your budget with `analyze_budget`, and present a
-day-by-day itinerary.
+hotel, activity, and destination-info specialists, check the results against
+your budget with `analyze_budget`, and present a day-by-day itinerary with
+the expected weather, packing tips, local currency, and famous sights.
 
 Under each plan, the CLI prints a **"Data used for this plan"** section
 straight from the specialists' results (not rewritten by the model): every
 flight, hotel, and activity option with its price and source link, the
-budget arithmetic, and any warning (e.g. flight prices that are estimates
+weather, exchange rate, and sights with their sources, the budget
+arithmetic, and any warning (e.g. flight prices that are estimates
 because fares for those dates aren't published yet).
 
 ### Run the tests
@@ -121,18 +138,20 @@ access is needed to run the suite (see `tests/`).
 - **Independent contexts.** Each specialist gets its own system prompt,
   conversation, and tool set — it has no visibility into the orchestrator's
   reasoning or the other specialists' results.
-- **Real delegation, not function calls dressed up.** Every specialist tool
-  makes its own `client.chat.completions.create()` call; the orchestrator
-  is coordinating separate agent runs, not just invoking library code.
-- **Heterogeneous specialization.** Three agents search the live web with
-  different scoped prompts; the fourth does deterministic math — the
-  orchestrator picks the right tool for each kind of sub-problem.
+- **Real delegation.** The hotel and activity specialists (and the flight
+  fallback) each make their own `client.chat.completions.create()` call;
+  the orchestrator is coordinating separate agent runs.
+- **Heterogeneous specialization.** Some agents summarize live web search
+  with scoped prompts, some pull exact data from public APIs (Google
+  Flights, weather, currency, Wikidata), and one does deterministic math —
+  the orchestrator picks the right tool for each kind of sub-problem.
 
 ## Tech stack
 
 Python · Groq API (free tier, `openai/gpt-oss-120b` + `openai/gpt-oss-20b`,
 function calling) · Google Flights (`fast-flights`) · DuckDuckGo search
-(`ddgs`) · pytest · GitHub Actions
+(`ddgs`) · Open-Meteo · Wikidata · Wikivoyage · OpenStreetMap Nominatim ·
+ExchangeRate-API · pytest · GitHub Actions
 
 ## License
 

@@ -3,5 +3,7 @@ ddgs>=9.16
 # fast-flights 3.1 imports typing_extensions without declaring it.
 fast-flights>=3.1
 typing_extensions>=4.0
+httpx>=0.28
+babel>=2.18
 python-dotenv>=1.0
 pytest>=7.4
