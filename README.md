@@ -69,12 +69,21 @@ multi-agent-travel-planner/
 │   ├── json_utils.py          # Lenient JSON extraction from agent replies
 │   ├── orchestrator.py        # Orchestrator system prompt + tool wiring
 │   ├── report.py              # "Data used for this plan" section
+│   ├── fact_check.py          # Checks the plan against the data, fixes mismatches
 │   └── agents/
 │       ├── flight_agent.py    # Google Flights fares, web-search fallback
 │       ├── hotel_agent.py     # Google Hotels via SerpApi, web-search fallback
 │       ├── activity_agent.py  # Activities specialist (web search)
 │       ├── destination_agent.py # Weather, currency, sights, guide (free APIs)
 │       └── budget_agent.py    # Pure-arithmetic budget checker
+├── server/                    # Website backend (FastAPI)
+│   ├── app.py                 # API: login check, streaming plans, limits, feedback, admin
+│   ├── auth.py                # Verifies Supabase login tokens
+│   ├── store.py               # Conversations, plans, feedback in Supabase Postgres
+│   ├── progress.py            # One-line agent summaries for live progress
+│   └── schema.sql             # Database tables — run once in Supabase
+├── web/                       # Website frontend (React + Vite + TypeScript)
+│   └── src/                   # Login/sign-up, planner chat, data cards, admin page
 ├── tests/                     # Mocked unit tests — no network/API calls
 ├── .github/workflows/ci.yml
 ├── requirements.txt
@@ -107,7 +116,9 @@ uses one hotel search out of the free plan's monthly allowance. Without the
 key, hotel prices are web-search estimates and every plan says so.
 
 The free tier has per-minute and per-day rate limits; a full trip plan uses
-several requests, so if you hit a limit, wait a minute and try again. If
+several requests, so if you hit a limit, wait a minute and try again. The
+orchestrator model's daily allowance (200,000 tokens at the time of
+writing) covers roughly 8–10 full plans a day. If
 Groq retires a model, set `GROQ_ORCHESTRATOR_MODEL` / `GROQ_AGENT_MODEL` in
 `.env` to a current one from <https://console.groq.com/docs/models>.
 
@@ -133,6 +144,12 @@ weather, exchange rate, and sights with their sources, the budget
 arithmetic, and any warning (e.g. flight prices that are estimates
 because fares for those dates aren't published yet).
 
+Before showing a plan, `src/fact_check.py` compares it line by line with
+that data — catching a price paired with the wrong airline or hotel, a
+figure just off the real one (a rounded $75 for a $76 total), or a layover
+length that doesn't exist. If it finds any, a quick editing pass fixes just
+those; anything still wrong is listed under the plan as **FACT CHECK**.
+
 ### Run the tests
 
 ```bash
@@ -141,6 +158,56 @@ pytest -v
 
 All tests mock the Groq client and web search — no API key or network
 access is needed to run the suite (see `tests/`).
+
+## Run the website locally
+
+The website adds accounts (email + password, or Google), live agent
+progress, data cards, saved trips, feedback, and an admin page. Logins and
+data live in a free [Supabase](https://supabase.com) project.
+
+### 1. Set up Supabase (once)
+
+1. Create a free project at <https://supabase.com>.
+2. **SQL Editor → New query**, paste the contents of `server/schema.sql`,
+   and click **Run**. This creates the tables.
+3. **Project Settings → API Keys**: copy the **Project URL**, the
+   **publishable** key, and the **secret** key into `.env` as
+   `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY`.
+   Never share or commit the secret key.
+4. **Authentication → URL Configuration**: set **Site URL** to
+   `http://localhost:5173` and add `http://localhost:5173/**` under
+   **Redirect URLs** (used by confirmation, password-reset, and Google links).
+5. Put your own email in `ADMIN_EMAILS` in `.env` to see the admin page.
+
+Email sign-up works now. Supabase's built-in email sender only allows a few
+emails per hour — fine for testing; set up custom SMTP in Supabase before a
+larger launch.
+
+**Optional — "Continue with Google":** in Google Cloud Console create an
+OAuth client (type *Web application*) with the authorized redirect URI
+`https://<your-project>.supabase.co/auth/v1/callback`, then paste its client
+ID and secret into Supabase → **Authentication → Sign In / Providers →
+Google** and enable it.
+
+### 2. Start it
+
+```bash
+pip install -r requirements.txt
+cd web && npm install && cd ..
+
+# Terminal 1 — backend on :8000
+uvicorn server.app:app --reload --port 8000
+
+# Terminal 2 — website on :5173 (forwards /api to the backend)
+cd web && npm run dev
+```
+
+Open <http://localhost:5173>, sign up, confirm your email, and plan a trip.
+Each account gets 3 plans a day and the whole site 8 (the free Groq
+allowance); change these with the `PLANS_PER_*` settings in `.env`.
+
+To try the production build on one port: `cd web && npm run build`, then
+open <http://localhost:8000> (the backend serves `web/dist`).
 
 ## Why this counts as "multi-agent"
 

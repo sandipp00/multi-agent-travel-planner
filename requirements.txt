@@ -6,4 +6,7 @@ typing_extensions>=4.0
 httpx>=0.28
 babel>=2.18
 python-dotenv>=1.0
+# Website backend
+fastapi>=0.158
+uvicorn>=0.54
 pytest>=7.4
