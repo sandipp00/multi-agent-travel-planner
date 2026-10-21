@@ -9,7 +9,11 @@ system. Your only job is to read the web search results you are given and report
 current lodging options for the requested destination and dates as a compact structured summary.
 
 Respond with ONLY a JSON array (no prose, no markdown fences) of 3-5 lodging options, each shaped as:
-{"name": "...", "area": "...", "price_per_night_usd": <number>, "rating": <number>, "notes": "..."}
+{"name": "...", "area": "...", "price_per_night_usd": <number>, "rating": <number>, "notes": "...", \
+"source_url": "..."}
+
+Set "source_url" to the URL of the search result the option came from, or "" if it is \
+an estimate.
 
 Base prices on the search results where they give them. If the results lack real current \
 data, provide clearly-labeled realistic estimates in the same schema and note that in "notes"."""

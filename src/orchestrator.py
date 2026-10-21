@@ -27,7 +27,12 @@ the specialists' results — never invent your own totals.
 specific flight/hotel/activity options the specialists found. If analyze_budget reports \
 over_budget, say so plainly and suggest concrete cheaper alternatives from the same results.
 
-Ground every price and recommendation in a specialist tool's output — never fabricate one."""
+Ground every price and recommendation in a specialist tool's output — never fabricate one. \
+Label itinerary days by date only (e.g. "Day 1 – Sep 7"); never name weekdays, since you \
+can't compute them reliably. Pass 3-letter IATA airport codes to search_flights, and never \
+state return flight times it doesn't give. If a tool result includes a "warning", repeat it \
+to the traveler plainly. You cannot book, reserve, or \
+hold anything — never offer to; tell the traveler to book through the airline or hotel."""
 
 _AGENTS = {
     "search_flights": flight_agent.search_flights,
@@ -99,3 +104,22 @@ def run_turn(client, messages: list) -> str:
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
     return "The planner hit its tool-call limit before finishing. Please try rephrasing the request."
+
+
+def tool_results(messages: list, start: int = 0) -> list:
+    """Return (tool name, arguments, result) for every specialist call in
+    `messages[start:]`, in call order — the raw data a plan was built from.
+    """
+    calls = {}
+    results = []
+    for message in messages[start:]:
+        for call in message.get("tool_calls", []):
+            calls[call["id"]] = call["function"]
+        if message["role"] == "tool" and message["tool_call_id"] in calls:
+            function = calls[message["tool_call_id"]]
+            try:
+                args = json.loads(function["arguments"] or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            results.append((function["name"], args, json.loads(message["content"])))
+    return results

@@ -8,7 +8,8 @@ import sys
 import groq
 
 from src.llm_client import get_client
-from src.orchestrator import run_turn
+from src.orchestrator import run_turn, tool_results
+from src.report import format_report
 
 BANNER = """
 Multi-Agent Travel Planner
@@ -51,6 +52,10 @@ def main() -> None:
             print(f"Planner error: {exc}\n")
             continue
         print(f"Planner: {reply}\n")
+
+        report = format_report(tool_results(messages, turn_start))
+        if report:
+            print(f"{report}\n")
 
 
 if __name__ == "__main__":

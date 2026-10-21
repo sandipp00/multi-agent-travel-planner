@@ -10,7 +10,11 @@ report well-regarded, currently operating things to do at the requested destinat
 the traveler's interests, as a compact structured summary.
 
 Respond with ONLY a JSON array (no prose, no markdown fences) of 4-8 activity options, each shaped as:
-{"name": "...", "category": "...", "estimated_cost_usd": <number>, "duration_hours": <number>, "notes": "..."}
+{"name": "...", "category": "...", "estimated_cost_usd": <number>, "duration_hours": <number>, "notes": "...", \
+"source_url": "..."}
+
+Set "source_url" to the URL of the search result the option came from, or "" if it is \
+an estimate.
 
 If the results lack real current data, provide clearly-labeled realistic estimates in the \
 same schema and note that in "notes"."""

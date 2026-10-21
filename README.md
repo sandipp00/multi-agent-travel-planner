@@ -18,13 +18,18 @@ search (no key needed). One **orchestrator** agent delegates to four
               ┌─────────────┬───────┼────────────┬──────────────┐
               ▼             ▼                    ▼              ▼
       search_flights  search_hotels     search_activities  analyze_budget
-      (own model call  (own model call   (own model call     (pure Python —
-       + web search)    + web search)     + web search)       no LLM call)
+      (Google Flights  (own model call   (own model call     (pure Python —
+       fares; web       + web search)     + web search)       no LLM call)
+       search fallback)
 ```
 
-Each specialist agent is a **separate model call** (GPT-OSS 20B) with a
-narrow system prompt, grounded in its own fresh DuckDuckGo search — not just
-a Python function the orchestrator happens to run locally. The orchestrator never searches the web
+The hotel and activity specialists are each a **separate model call**
+(GPT-OSS 20B) with a narrow system prompt, grounded in its own fresh
+DuckDuckGo search — not just a Python function the orchestrator happens to
+run locally. The flight specialist gets **real fares from Google Flights**
+through the free, unofficial [`fast-flights`](https://pypi.org/project/fast-flights/)
+library, and falls back to the same search-and-summarize call if Google
+Flights is unavailable or it's given a city name instead of an airport code. The orchestrator never searches the web
 itself; it only sees each specialist's structured JSON result and reasons
 over those. `analyze_budget` is deliberately plain arithmetic (no LLM call)
 so budget checks are exact rather than estimated.
@@ -46,7 +51,7 @@ multi-agent-travel-planner/
 │   ├── json_utils.py          # Lenient JSON extraction from agent replies
 │   ├── orchestrator.py        # Orchestrator system prompt + tool wiring
 │   └── agents/
-│       ├── flight_agent.py    # Flight-search specialist (web search)
+│       ├── flight_agent.py    # Google Flights fares, web-search fallback
 │       ├── hotel_agent.py     # Lodging-search specialist (web search)
 │       ├── activity_agent.py  # Activities specialist (web search)
 │       └── budget_agent.py    # Pure-arithmetic budget checker
@@ -96,6 +101,12 @@ hotel, and activity specialists (each doing its own live web search),
 check the results against your budget with `analyze_budget`, and present a
 day-by-day itinerary.
 
+Under each plan, the CLI prints a **"Data used for this plan"** section
+straight from the specialists' results (not rewritten by the model): every
+flight, hotel, and activity option with its price and source link, the
+budget arithmetic, and any warning (e.g. flight prices that are estimates
+because fares for those dates aren't published yet).
+
 ### Run the tests
 
 ```bash
@@ -120,7 +131,8 @@ access is needed to run the suite (see `tests/`).
 ## Tech stack
 
 Python · Groq API (free tier, `openai/gpt-oss-120b` + `openai/gpt-oss-20b`,
-function calling) · DuckDuckGo search (`ddgs`) · pytest · GitHub Actions
+function calling) · Google Flights (`fast-flights`) · DuckDuckGo search
+(`ddgs`) · pytest · GitHub Actions
 
 ## License
 
