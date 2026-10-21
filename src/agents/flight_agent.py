@@ -65,6 +65,9 @@ TOOL = {
 }
 
 MAX_OPTIONS = 5
+# Layovers at least this long are flagged so the planner can weigh them
+# against the price saving.
+LONG_LAYOVER_MINUTES = 6 * 60
 # Google Flights only publishes fares roughly 330 days ahead (measured
 # October 2026); later dates always come back empty.
 BOOKING_HORIZON_DAYS = 330
@@ -77,23 +80,44 @@ def _format_datetime(value) -> str:
     return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}"
 
 
+def _to_datetime(value) -> dt.datetime:
+    hour, minute = (tuple(value.time) + (0, 0))[:2]
+    return dt.datetime(*value.date, hour, minute)
+
+
+def _hours_minutes(minutes: int) -> str:
+    return f"{minutes // 60}h {minutes % 60}m"
+
+
 def _to_option(result, round_trip: bool) -> dict:
     legs = result.flights
     stops = len(legs) - 1
     flying_minutes = sum(leg.duration for leg in legs)
+    # Times are local, so first departure -> last arrival can't be compared
+    # across time zones. A layover starts and ends at the same airport, so
+    # its length is exact; total trip time = flying time + layovers.
+    layovers = [
+        (leg.to_airport.code, int((_to_datetime(nxt.departure) - _to_datetime(leg.arrival)).total_seconds() // 60))
+        for leg, nxt in zip(legs, legs[1:])
+    ]
+    total_minutes = flying_minutes + sum(minutes for _, minutes in layovers)
+
     notes = "Real fare from Google Flights"
     notes += (
         " (round-trip total). Outbound times only; return times not available."
     ) if round_trip else " (one-way)."
-    if stops:
-        notes += " Connects via " + ", ".join(leg.to_airport.code for leg in legs[:-1]) + "."
+    for airport, minutes in layovers:
+        notes += f" Layover {_hours_minutes(minutes)} in {airport}"
+        notes += " (long — likely overnight)." if minutes >= LONG_LAYOVER_MINUTES else "."
     return {
         "airline": ", ".join(result.airlines),
         "price_usd": result.price,
         "departure_time": _format_datetime(legs[0].departure),
         "arrival_time": _format_datetime(legs[-1].arrival),
         "stops": stops,
-        "duration": f"{flying_minutes // 60}h {flying_minutes % 60}m flying time",
+        "duration": f"{_hours_minutes(total_minutes)} total trip ({_hours_minutes(flying_minutes)} flying)",
+        "total_trip_minutes": total_minutes,
+        "longest_layover_minutes": max((minutes for _, minutes in layovers), default=0),
         "notes": notes,
     }
 

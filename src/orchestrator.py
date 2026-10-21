@@ -34,6 +34,10 @@ over_budget, say so plainly and suggest concrete cheaper alternatives from the s
 5. Use get_destination_info in the plan: say what weather to expect (and whether it is a \
 forecast or a typical-weather guide), what to pack for it, the local currency with a \
 conversion example, and work its famous sights into the itinerary.
+6. Choose flights on price AND total trip time, not price alone. Compare each option's \
+total_trip_minutes and longest_layover_minutes: prefer a modestly pricier flight that saves \
+many hours or avoids a long/overnight layover, and state the trade-off (e.g. "$91 more, \
+saves 12 hours"). Plan the arrival day around the actual arrival date and time.
 
 Ground every price and recommendation in a specialist tool's output — never fabricate one. \
 Label itinerary days by date only (e.g. "Day 1 – Sep 7"); never name weekdays, since you \

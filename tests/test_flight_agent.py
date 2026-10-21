@@ -45,8 +45,14 @@ def test_uses_real_google_flights_fares(mock_get_flights, mock_call):
     assert cheapest["departure_time"] == "2027-09-07 20:05"
     assert cheapest["arrival_time"] == "2027-09-09 09:55"
     assert cheapest["stops"] == 1
-    assert cheapest["duration"] == "15h 45m flying time"
-    assert "round-trip" in cheapest["notes"] and "IST" in cheapest["notes"]
+    # Arrive IST 09-08 14:50, depart IST 09-09 06:55: a 16h 5m layover.
+    assert cheapest["duration"] == "31h 50m total trip (15h 45m flying)"
+    assert cheapest["total_trip_minutes"] == 1910
+    assert cheapest["longest_layover_minutes"] == 965
+    assert "Layover 16h 5m in IST (long — likely overnight)." in cheapest["notes"]
+    assert "round-trip" in cheapest["notes"]
+    # SWISS: arrive ZRH 06:10, depart 09:10 — a normal 3h connection.
+    assert "Layover 3h 0m in ZRH." in result["options"][1]["notes"]
     assert result["options"][1]["price_usd"] == 1099
 
 
