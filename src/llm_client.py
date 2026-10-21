@@ -32,17 +32,19 @@ def call_with_web_search(
     effort: str = "medium",
     max_tokens: int = 4096,
     max_uses: int = 5,
+    max_continuations: int = 3,
 ) -> str:
     """Run a single-purpose Claude call equipped with the web_search tool.
 
     Handles the `pause_turn` stop reason (the server-side search loop hit its
-    round-trip limit) by resending, per the tool-use docs. Returns the final
-    response's concatenated text blocks.
+    round-trip limit) by resending, per the tool-use docs — at most
+    `max_continuations` times, so a search that keeps pausing can't loop (and
+    bill) forever. Returns the final response's concatenated text blocks.
     """
     tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}]
     messages = [{"role": "user", "content": user_message}]
 
-    while True:
+    for _ in range(max_continuations + 1):
         response = client.messages.create(
             model=model,
             max_tokens=max_tokens,
@@ -63,3 +65,5 @@ def call_with_web_search(
             return '{"error": "The search agent declined this request."}'
 
         return "".join(block.text for block in response.content if block.type == "text")
+
+    return '{"error": "The search agent did not finish within its continuation limit."}'
