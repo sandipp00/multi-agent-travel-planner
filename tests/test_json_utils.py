@@ -21,3 +21,15 @@ def test_parses_json_in_code_fence():
 def test_falls_back_to_raw_on_garbage():
     result = parse_json_loose("not json at all")
     assert result == {"raw": "not json at all"}
+
+
+def test_prefers_payload_over_short_bracketed_aside():
+    text = 'Source [1]: [{"airline": "TAP", "price_usd": 850}]'
+    result = parse_json_loose(text)
+    assert result == [{"airline": "TAP", "price_usd": 850}]
+
+
+def test_ignores_trailing_brackets_after_payload():
+    text = '{"a": 1}\nSee [note] below.'
+    result = parse_json_loose(text)
+    assert result == {"a": 1}
