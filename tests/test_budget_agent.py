@@ -1,8 +1,8 @@
-from src.agents.budget_agent import _analyze_budget_impl
+from src.agents.budget_agent import analyze_budget
 
 
 def test_under_budget():
-    result = _analyze_budget_impl(
+    result = analyze_budget(
         total_budget_usd=3000,
         flight_cost_usd=800,
         hotel_cost_per_night_usd=150,
@@ -16,7 +16,7 @@ def test_under_budget():
 
 
 def test_over_budget():
-    result = _analyze_budget_impl(
+    result = analyze_budget(
         total_budget_usd=1000,
         flight_cost_usd=800,
         hotel_cost_per_night_usd=150,
@@ -29,7 +29,7 @@ def test_over_budget():
 
 
 def test_defaults_activities_to_zero():
-    result = _analyze_budget_impl(
+    result = analyze_budget(
         total_budget_usd=1000,
         flight_cost_usd=400,
         hotel_cost_per_night_usd=100,

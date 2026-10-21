@@ -5,10 +5,39 @@ Kept as its own "agent" tool so the orchestrator has a dedicated, reliable
 way to check estimates against the traveler's stated budget.
 """
 
-from anthropic import beta_tool
+TOOL = {
+    "type": "function",
+    "function": {
+        "name": "analyze_budget",
+        "description": "Check estimated trip costs against the traveler's total budget.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "total_budget_usd": {
+                    "type": "number",
+                    "description": "The traveler's total budget for the trip, in USD.",
+                },
+                "flight_cost_usd": {
+                    "type": "number",
+                    "description": "Estimated round-trip (or one-way) flight cost, in USD.",
+                },
+                "hotel_cost_per_night_usd": {
+                    "type": "number",
+                    "description": "Estimated hotel cost per night, in USD.",
+                },
+                "nights": {"type": "integer", "description": "Number of nights of lodging."},
+                "activities_cost_usd": {
+                    "type": ["number", "null"],
+                    "description": "Estimated total cost of planned activities, in USD.",
+                },
+            },
+            "required": ["total_budget_usd", "flight_cost_usd", "hotel_cost_per_night_usd", "nights"],
+        },
+    },
+}
 
 
-def _analyze_budget_impl(
+def analyze_budget(
     total_budget_usd: float,
     flight_cost_usd: float,
     hotel_cost_per_night_usd: float,
@@ -28,25 +57,3 @@ def _analyze_budget_impl(
         "remaining_usd": remaining_usd,
         "over_budget": remaining_usd < 0,
     }
-
-
-@beta_tool
-def analyze_budget(
-    total_budget_usd: float,
-    flight_cost_usd: float,
-    hotel_cost_per_night_usd: float,
-    nights: int,
-    activities_cost_usd: float = 0.0,
-) -> dict:
-    """Check estimated trip costs against the traveler's total budget.
-
-    Args:
-        total_budget_usd: The traveler's total budget for the trip, in USD.
-        flight_cost_usd: Estimated round-trip (or one-way) flight cost, in USD.
-        hotel_cost_per_night_usd: Estimated hotel cost per night, in USD.
-        nights: Number of nights of lodging.
-        activities_cost_usd: Estimated total cost of planned activities, in USD.
-    """
-    return _analyze_budget_impl(
-        total_budget_usd, flight_cost_usd, hotel_cost_per_night_usd, nights, activities_cost_usd
-    )

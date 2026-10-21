@@ -1,12 +1,12 @@
 """The orchestrator agent: coordinates the flight, hotel, activity, and
-budget specialist agents (via the Anthropic tool runner) to plan a trip.
+budget specialist agents (via Groq tool calling) to plan a trip.
 """
 
-from src.agents.activity_agent import search_activities
-from src.agents.budget_agent import analyze_budget
-from src.agents.flight_agent import search_flights
-from src.agents.hotel_agent import search_hotels
-from src.config import MODEL_ORCHESTRATOR, ORCHESTRATOR_MAX_TOKENS
+import json
+from concurrent.futures import ThreadPoolExecutor
+
+from src.agents import activity_agent, budget_agent, flight_agent, hotel_agent
+from src.config import MAX_TOOL_ROUNDS, MODEL_ORCHESTRATOR, ORCHESTRATOR_MAX_TOKENS
 
 ORCHESTRATOR_SYSTEM = """You are a travel-planning orchestrator. You do not search the web \
 yourself — instead you coordinate four specialist agents, each exposed to you as a tool:
@@ -29,36 +29,73 @@ over_budget, say so plainly and suggest concrete cheaper alternatives from the s
 
 Ground every price and recommendation in a specialist tool's output — never fabricate one."""
 
-TOOLS = [search_flights, search_hotels, search_activities, analyze_budget]
+_AGENTS = {
+    "search_flights": flight_agent.search_flights,
+    "search_hotels": hotel_agent.search_hotels,
+    "search_activities": activity_agent.search_activities,
+    "analyze_budget": budget_agent.analyze_budget,
+}
+
+TOOLS = [flight_agent.TOOL, hotel_agent.TOOL, activity_agent.TOOL, budget_agent.TOOL]
 
 
-def build_runner(client, messages):
-    """Create a tool-runner for one orchestrator turn over the given history."""
-    return client.beta.messages.tool_runner(
-        model=MODEL_ORCHESTRATOR,
-        max_tokens=ORCHESTRATOR_MAX_TOKENS,
-        system=ORCHESTRATOR_SYSTEM,
-        tools=TOOLS,
-        messages=messages,
-    )
+def _run_tool(tool_call) -> str:
+    """Run one specialist for a tool call and return its result as JSON.
+
+    Errors come back to the orchestrator as {"error": ...} rather than
+    raising, so one failed search doesn't end the whole turn.
+    """
+    name = tool_call.function.name
+    agent = _AGENTS.get(name)
+    if agent is None:
+        return json.dumps({"error": f"Unknown tool: {name}"})
+    try:
+        args = json.loads(tool_call.function.arguments or "{}")
+        # Models often send null for optional parameters — drop those so
+        # each agent's own default applies.
+        args = {key: value for key, value in args.items() if value is not None}
+        return json.dumps(agent(**args))
+    except Exception as exc:
+        return json.dumps({"error": f"{name} failed: {exc}"})
 
 
 def run_turn(client, messages: list) -> str:
     """Run one full orchestrator turn (including any tool delegation) and
-    return the assistant's final text. Appends the assistant turn to
-    `messages` in place so the caller can continue the conversation.
+    return the assistant's final text. Appends the assistant and tool
+    messages to `messages` in place so the caller can continue the
+    conversation.
     """
-    runner = build_runner(client, messages)
-    final_message = None
-    for message in runner:
-        final_message = message
+    for _ in range(MAX_TOOL_ROUNDS):
+        response = client.chat.completions.create(
+            model=MODEL_ORCHESTRATOR,
+            max_tokens=ORCHESTRATOR_MAX_TOKENS,
+            messages=[{"role": "system", "content": ORCHESTRATOR_SYSTEM}, *messages],
+            tools=TOOLS,
+        )
+        message = response.choices[0].message
 
-    if final_message is None:
-        return ""
+        if not message.tool_calls:
+            text = message.content or ""
+            messages.append({"role": "assistant", "content": text})
+            return text
 
-    messages.append({"role": "assistant", "content": final_message.content})
+        messages.append({
+            "role": "assistant",
+            "content": message.content or "",
+            "tool_calls": [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.function.name, "arguments": call.function.arguments},
+                }
+                for call in message.tool_calls
+            ],
+        })
 
-    if final_message.stop_reason == "refusal":
-        return "The planner declined to continue with this request."
+        # Independent specialist calls in one round run in parallel.
+        with ThreadPoolExecutor() as pool:
+            results = list(pool.map(_run_tool, message.tool_calls))
+        for call, result in zip(message.tool_calls, results):
+            messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
-    return "".join(block.text for block in final_message.content if block.type == "text")
+    return "The planner hit its tool-call limit before finishing. Please try rephrasing the request."

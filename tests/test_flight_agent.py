@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from src.agents.flight_agent import _search_flights_impl
+from src.agents.flight_agent import search_flights
 
 
 @patch("src.agents.flight_agent.get_client", return_value="fake-client")
@@ -11,7 +11,7 @@ def test_search_flights_parses_agent_response(mock_call, _mock_client):
         '"arrival_time": "11:00", "stops": 0, "duration": "3h", "notes": "nonstop"}]'
     )
 
-    result = _search_flights_impl("NYC", "LAX", "2026-09-01", "2026-09-08")
+    result = search_flights("NYC", "LAX", "2026-09-01", "2026-09-08")
 
     assert isinstance(result, list)
     assert result[0]["airline"] == "Test Air"
@@ -25,7 +25,7 @@ def test_search_flights_parses_agent_response(mock_call, _mock_client):
 @patch("src.agents.flight_agent.call_with_web_search")
 def test_search_flights_one_way_message(mock_call, _mock_client):
     mock_call.return_value = "[]"
-    _search_flights_impl("NYC", "LAX", "2026-09-01")
+    search_flights("NYC", "LAX", "2026-09-01")
     call_args = mock_call.call_args[0]
     user_message = call_args[2]
     assert "one-way" in user_message

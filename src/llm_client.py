@@ -1,69 +1,79 @@
-"""Shared Anthropic client and the web-search call pattern used by every
-specialist agent.
+"""Shared Groq client and the search-then-summarize call pattern used by
+every specialist agent.
 """
 
-import os
-
-import anthropic
+from ddgs import DDGS
 from dotenv import load_dotenv
+from groq import Groq
+
+from src.config import SEARCH_MAX_RESULTS, SEARCH_SNIPPET_CHARS
 
 load_dotenv()
 
 _client = None
 
 
-def get_client() -> anthropic.Anthropic:
-    """Return a process-wide Anthropic client.
+def get_client() -> Groq:
+    """Return a process-wide Groq client.
 
-    Resolves credentials the standard way (ANTHROPIC_API_KEY, or an
-    `ant auth login` profile) — no key is hardcoded here.
+    Reads GROQ_API_KEY from the environment (or .env) — no key is hardcoded
+    here. Free keys come from https://console.groq.com/keys.
     """
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        # The free tier's tokens-per-minute limit is easy to hit mid-plan;
+        # extra retries let the SDK wait out the server's retry-after delay.
+        _client = Groq(max_retries=6)
     return _client
 
 
+def web_search(query: str, max_results: int = SEARCH_MAX_RESULTS) -> list:
+    """Search the web with DuckDuckGo (free, no API key).
+
+    Returns [] on any search failure (rate limit, network error) so the
+    agent can fall back to labeled estimates instead of crashing.
+    """
+    try:
+        return DDGS().text(query, max_results=max_results)
+    except Exception:
+        return []
+
+
+def _format_results(results: list) -> str:
+    if not results:
+        return (
+            "No web results were available. Use clearly-labeled realistic "
+            'estimates and say so in "notes".'
+        )
+    lines = []
+    for i, result in enumerate(results, 1):
+        body = (result.get("body") or "")[:SEARCH_SNIPPET_CHARS]
+        lines.append(f"{i}. {result.get('title', '')} — {result.get('href', '')}\n   {body}")
+    return "\n".join(lines)
+
+
 def call_with_web_search(
-    client: anthropic.Anthropic,
+    client: Groq,
     system: str,
     user_message: str,
     model: str,
-    effort: str = "medium",
+    search_query: str = "",
     max_tokens: int = 4096,
-    max_uses: int = 5,
-    max_continuations: int = 3,
 ) -> str:
-    """Run a single-purpose Claude call equipped with the web_search tool.
+    """Run a single-purpose specialist call grounded in fresh web results.
 
-    Handles the `pause_turn` stop reason (the server-side search loop hit its
-    round-trip limit) by resending, per the tool-use docs — at most
-    `max_continuations` times, so a search that keeps pausing can't loop (and
-    bill) forever. Returns the final response's concatenated text blocks.
+    Searches DuckDuckGo for `search_query` (or `user_message` if empty),
+    puts the results in the prompt, and returns the model's text reply.
     """
-    tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}]
-    messages = [{"role": "user", "content": user_message}]
+    results = web_search(search_query or user_message)
+    prompt = f"{user_message}\n\nWeb search results:\n{_format_results(results)}"
 
-    for _ in range(max_continuations + 1):
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            tools=tools,
-            messages=messages,
-            output_config={"effort": effort},
-        )
-
-        if response.stop_reason == "pause_turn":
-            messages = [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response.content},
-            ]
-            continue
-
-        if response.stop_reason == "refusal":
-            return '{"error": "The search agent declined this request."}'
-
-        return "".join(block.text for block in response.content if block.type == "text")
-
-    return '{"error": "The search agent did not finish within its continuation limit."}'
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return response.choices[0].message.content or ""
